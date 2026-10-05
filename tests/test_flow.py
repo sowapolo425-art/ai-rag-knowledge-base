@@ -6,6 +6,7 @@ from reportlab.pdfgen import canvas
 
 from app.config import Settings
 from app.main import create_app
+from app.parsing import extract_sections
 
 
 def test_document_workflow(tmp_path):
@@ -54,3 +55,19 @@ def test_invalid_uploads(tmp_path):
     assert client.post("/api/documents", files={"file": ("blank.txt", b"  ")}).status_code == 422
     assert client.post("/api/documents", files={"file": ("broken.pdf", b"not a pdf")}).status_code == 422
     app.state.store.qdrant.close()
+
+
+def test_public_demo_is_readonly(tmp_path):
+    app = create_app(Settings(data_dir=tmp_path, demo_readonly=True))
+    client = TestClient(app)
+    assert client.get("/api/status").json()["demo_readonly"] is True
+    assert client.post("/api/documents", files={"file": ("x.txt", b"demo")}).status_code == 403
+    assert client.delete("/api/documents/any-id").status_code == 403
+    assert client.post("/api/ask", json={"question": "示例文档说了什么？"}).status_code == 200
+    app.state.store.qdrant.close()
+
+
+def test_text_paragraph_locations():
+    assert extract_sections("policy.txt", "年假申请。\n\n报销审批。".encode()) == [
+        ("段落 1", "年假申请。"), ("段落 2", "报销审批。")
+    ]

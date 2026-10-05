@@ -1,6 +1,9 @@
 from pathlib import Path
+from collections import defaultdict, deque
+from threading import Lock
+from time import monotonic
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -25,6 +28,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     store = Store(settings)
     app = FastAPI(title="企业知识库 A", version="1.0.0")
     app.state.store = store
+    recent_asks = defaultdict(deque)
+    rate_lock = Lock()
 
     @app.get("/")
     def home():
@@ -32,7 +37,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/status")
     def status():
-        return {"embedding_mode": store.embedder.mode, "answer_mode": "llm" if settings.api_key and settings.chat_model else "offline", "document_count": len(store.list_documents())}
+        return {"embedding_mode": store.embedder.mode, "answer_mode": "llm" if settings.api_key and settings.chat_model else "offline", "document_count": len(store.list_documents()), "demo_readonly": settings.demo_readonly}
 
     @app.get("/api/documents")
     def documents():
@@ -40,6 +45,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/documents", status_code=201)
     async def upload(file: UploadFile = File(...)):
+        if settings.demo_readonly:
+            raise HTTPException(403, "公开演示仅供阅读和提问；请在本地运行项目体验上传。")
+        if len(store.list_documents()) >= settings.max_documents:
+            raise HTTPException(409, "文档数量已达到上限。")
         filename = Path(file.filename or "").name
         suffix = Path(filename).suffix.lower()
         if suffix not in {".pdf", ".docx", ".txt"}:
@@ -59,12 +68,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.delete("/api/documents/{doc_id}")
     def delete(doc_id: str):
+        if settings.demo_readonly:
+            raise HTTPException(403, "公开演示不允许删除文档。")
         if not store.delete_document(doc_id):
             raise HTTPException(404, "文档不存在。")
         return {"deleted": True}
 
     @app.post("/api/ask")
-    def ask(request: AskRequest):
+    def ask(request: AskRequest, http_request: Request):
+        if settings.demo_readonly:
+            address = http_request.client.host if http_request.client else "unknown"
+            now = monotonic()
+            with rate_lock:
+                attempts = recent_asks[address]
+                while attempts and now - attempts[0] >= 60:
+                    attempts.popleft()
+                if len(attempts) >= settings.ask_rate_per_minute:
+                    raise HTTPException(429, "提问太频繁，请稍后再试。")
+                attempts.append(now)
         recent_questions = [item.content for item in request.history if item.role == "user"][-2:]
         hits = store.search(" ".join([*recent_questions, request.question]))
         try:

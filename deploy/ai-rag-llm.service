@@ -1,0 +1,15 @@
+[Unit]
+Description=Enterprise Knowledge Base A local Qwen model
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/apps/ai-rag-knowledge-base
+ExecStart=/home/ubuntu/apps/llama-b11414/llama-server --model /home/ubuntu/apps/ai-rag-knowledge-base/qwen2.5-1.5b-instruct-q4_k_m.gguf --alias qwen2.5-1.5b-instruct-q4_k_m --host 127.0.0.1 --port 8780 --ctx-size 4096 --threads 4 --parallel 1
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

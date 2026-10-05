@@ -26,8 +26,12 @@ def local_embedding(text: str) -> list[float]:
 class Embedder:
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.mode = "api" if settings.embedding_model and settings.api_key else "local"
+        self.mode = "api" if settings.embedding_model and settings.api_key else "semantic" if settings.local_embedding_model else "local"
         self.client = OpenAI(api_key=settings.api_key, base_url=settings.base_url) if self.mode == "api" else None
+        self.local_model = None
+        if self.mode == "semantic":
+            from fastembed import TextEmbedding
+            self.local_model = TextEmbedding(model_name=settings.local_embedding_model, cache_dir=str(settings.data_dir / "models"))
 
     def encode(self, texts: list[str]) -> list[list[float]]:
         if not texts:
@@ -35,4 +39,6 @@ class Embedder:
         if self.client:
             response = self.client.embeddings.create(model=self.settings.embedding_model, input=texts)
             return [item.embedding for item in sorted(response.data, key=lambda item: item.index)]
+        if self.local_model:
+            return [embedding.tolist() for embedding in self.local_model.embed(texts)]
         return [local_embedding(text) for text in texts]

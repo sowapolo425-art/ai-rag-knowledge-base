@@ -1,4 +1,5 @@
 from io import BytesIO
+import re
 
 from docx import Document
 from pypdf import PdfReader
@@ -19,7 +20,8 @@ def extract_sections(filename: str, content: bytes) -> list[tuple[str, str]]:
             paragraphs = [(i, p.text.strip()) for i, p in enumerate(doc.paragraphs, 1) if p.text.strip()]
             return [(f"段落 {i}", text) for i, text in paragraphs]
         if suffix == "txt":
-            return [("正文", content.decode("utf-8-sig"))]
+            paragraphs = [part.strip() for part in re.split(r"\n\s*\n", content.decode("utf-8-sig")) if part.strip()]
+            return [(f"段落 {i}", text) for i, text in enumerate(paragraphs, 1)]
     except Exception as exc:
         raise ParseError("文件无法解析，请确认文件未损坏且不是加密文档。") from exc
     raise ParseError("仅支持 PDF、DOCX 和 TXT 文件。")

@@ -19,7 +19,8 @@ class Store:
         self.db_path = self.data_dir / "documents.sqlite3"
         self.qdrant = QdrantClient(path=str(self.data_dir / "qdrant"))
         self.embedder = Embedder(settings)
-        identity = f"{self.embedder.mode}:{settings.embedding_model if self.embedder.mode == 'api' else 'char-ngram-v1'}:{settings.base_url if self.embedder.mode == 'api' else ''}"
+        model_name = settings.embedding_model if self.embedder.mode == "api" else settings.local_embedding_model if self.embedder.mode == "semantic" else "char-ngram-v1"
+        identity = f"{self.embedder.mode}:{model_name}:{settings.base_url if self.embedder.mode == 'api' else ''}"
         self.collection = "chunks_" + hashlib.sha256(identity.encode()).hexdigest()[:16]
         self._init_db()
 
@@ -81,4 +82,7 @@ class Store:
             return []
         vector = self.embedder.encode([question])[0]
         hits = self.qdrant.query_points(self.collection, query=vector, limit=limit, with_payload=True).points
-        return [{"score": round(hit.score, 4), **hit.payload} for hit in hits if hit.score >= 0.08]
+        minimum_score = 0.52 if self.embedder.mode == "semantic" else 0.08
+        if hits:
+            minimum_score = max(minimum_score, hits[0].score * 0.7)
+        return [{"score": round(hit.score, 4), **hit.payload} for hit in hits[:3] if hit.score >= minimum_score]
