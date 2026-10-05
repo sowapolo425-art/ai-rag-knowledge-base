@@ -94,6 +94,6 @@ python -m pytest -q
 
 当前版本是单用户作品集演示，没有登录、租户隔离或上传文件恶意内容扫描。不要将其直接暴露为企业生产服务，也不要上传真实机密资料。扫描版 PDF 尚未集成 OCR。模型回答可能出错，页面始终显示可核对的原文来源。
 
-## 放到 GitHub 前
+## GitHub 作品集
 
-建议以 `ai-rag-knowledge-base` 建立独立仓库，保留 README、示例文件和测试。先在本机完成上传与问答演示，再自行决定是否公开和部署；本仓库不包含 API 密钥或真实业务数据。
+源码已发布在 [sowapolo425-art/ai-rag-knowledge-base](https://github.com/sowapolo425-art/ai-rag-knowledge-base)。仓库保留了 README、示例文件、测试与实际运行截图，不包含 API 密钥或真实业务数据。当前没有公网在线 Demo；面试演示可在本机启动 Docker 后使用示例文档操作。
