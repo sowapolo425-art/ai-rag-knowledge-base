@@ -1,0 +1,13 @@
+services:
+  knowledge-base:
+    build: .
+    ports:
+      - "127.0.0.1:${HOST_PORT:-8765}:8000"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - kb-data:/app/data
+    restart: unless-stopped
+volumes:
+  kb-data:

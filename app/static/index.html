@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>企业知识库 A</title>
+  <style>
+    :root{font-family:Inter,"Microsoft YaHei",system-ui,sans-serif;color:#17232f;background:#f4f7fa}
+    *{box-sizing:border-box}body{margin:0}header{background:#142b3f;color:white;padding:22px max(24px,calc((100vw - 1200px)/2))}
+    header h1{font-size:23px;margin:0 0 5px}header p{margin:0;color:#c9d8e3;font-size:14px}
+    main{max-width:1200px;margin:28px auto;padding:0 24px;display:grid;grid-template-columns:350px 1fr;gap:24px}
+    section{background:white;border:1px solid #dfe6ec;border-radius:14px;box-shadow:0 6px 22px #213b5010;padding:24px}
+    h2{font-size:18px;margin:0 0 16px}p{line-height:1.6}.muted{color:#617386;font-size:13px}
+    .badge{display:inline-block;background:#e7f4ee;color:#166347;border-radius:100px;padding:5px 10px;font-size:12px;font-weight:700;margin-bottom:18px}
+    input[type=file]{width:100%;border:1px dashed #9cb5c8;border-radius:10px;padding:20px;background:#f7fafc}
+    button{border:0;border-radius:9px;background:#147d68;color:white;padding:11px 16px;cursor:pointer;font-weight:700}
+    button:hover{background:#0c6654}button:disabled{opacity:.55;cursor:wait}.secondary{background:#e8eef2;color:#233d50}.secondary:hover{background:#d7e2e9}
+    .upload{display:grid;gap:12px}.doc{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;border-top:1px solid #e8edf1;padding:12px 0}
+    .doc strong{overflow-wrap:anywhere}.doc small{display:block;color:#67798a;margin-top:4px}.doc button{padding:6px 9px;font-size:12px}
+    .chat{min-height:440px;display:flex;flex-direction:column}.messages{flex:1;max-height:58vh;overflow:auto;margin-bottom:16px}
+    .bubble{border-radius:12px;padding:14px 16px;margin:0 0 12px;white-space:pre-wrap;line-height:1.65}.user{background:#e5f2ee;margin-left:12%}.assistant{background:#f2f5f7;margin-right:8%}
+    .sources{margin:-4px 0 16px 0}.source{border-left:3px solid #147d68;background:#f8fafb;padding:10px 12px;margin:7px 0;font-size:13px;line-height:1.5}
+    .source strong{display:block}.source p{margin:5px 0 0;color:#4d6274}.ask{display:flex;gap:10px}.ask input{flex:1;min-width:0;border:1px solid #bdccd7;border-radius:9px;padding:12px;font-size:15px}
+    #notice{min-height:22px;color:#a64623;font-size:13px;margin-top:10px}@media(max-width:760px){main{grid-template-columns:1fr;padding:0 14px;margin:14px auto}section{padding:18px}.messages{max-height:50vh}}
+  </style>
+</head>
+<body>
+  <header><h1>企业知识库 A</h1><p>上传资料，提出问题，查看回答所依据的原文位置。</p></header>
+  <main>
+    <section>
+      <h2>知识文档</h2><div class="badge" id="mode">正在连接…</div>
+      <form class="upload" id="upload"><input id="file" type="file" accept=".pdf,.docx,.txt" required><button id="uploadButton">上传并建立索引</button></form>
+      <p class="muted">支持 PDF、Word DOCX 和 TXT；扫描版 PDF 需要先做文字识别。</p>
+      <h2>已上传 <span id="count">0</span></h2><div id="documents" class="muted">暂无文档</div>
+    </section>
+    <section class="chat">
+      <h2>文档问答</h2>
+      <div class="messages" id="messages"><div class="bubble assistant">先上传一份文档，再问我其中的内容。回答下方会列出引用位置和原文。</div></div>
+      <form class="ask" id="ask"><input id="question" autocomplete="off" placeholder="例如：请假需要提前几天申请？" minlength="2" maxlength="1000" required><button id="askButton">提问</button></form>
+      <div id="notice" role="status"></div>
+    </section>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id);
+    const history = [];
+    const notice = message => $('notice').textContent = message;
+    async function api(path, options={}) {
+      const response = await fetch(path, options);
+      const body = await response.json();
+      if (!response.ok) throw new Error(typeof body.detail === 'string' ? body.detail : '请求失败，请稍后重试。');
+      return body;
+    }
+    function bubble(text, kind) {
+      const div = document.createElement('div'); div.className = 'bubble ' + kind; div.textContent = text;
+      $('messages').append(div); $('messages').scrollTop = $('messages').scrollHeight;
+    }
+    async function refresh() {
+      const [status, docs] = await Promise.all([api('/api/status'), api('/api/documents')]);
+      $('mode').textContent = status.answer_mode === 'llm' ? '模型问答 · ' + status.embedding_mode + ' 检索' : '离线演示 · 本地检索';
+      $('count').textContent = docs.length; $('documents').replaceChildren();
+      if (!docs.length) { $('documents').textContent = '暂无文档'; return; }
+      for (const doc of docs) {
+        const row = document.createElement('div'); row.className = 'doc';
+        const info = document.createElement('div'); const title = document.createElement('strong'); title.textContent = doc.filename;
+        const meta = document.createElement('small'); meta.textContent = doc.chunk_count + ' 个片段 · ' + doc.file_type.toUpperCase();
+        info.append(title, meta);
+        const del = document.createElement('button'); del.className = 'secondary'; del.type = 'button'; del.textContent = '删除';
+        del.onclick = async () => { try { await api('/api/documents/' + encodeURIComponent(doc.id), {method:'DELETE'}); await refresh(); notice('文档已删除。'); } catch(e) { notice(e.message); } };
+        row.append(info, del); $('documents').append(row);
+      }
+    }
+    $('upload').onsubmit = async event => {
+      event.preventDefault(); notice(''); const file = $('file').files[0]; if (!file) return;
+      const data = new FormData(); data.append('file', file); $('uploadButton').disabled = true;
+      try { await api('/api/documents', {method:'POST', body:data}); $('file').value = ''; await refresh(); notice('文档已建立索引。'); }
+      catch(e) { notice(e.message); } finally { $('uploadButton').disabled = false; }
+    };
+    $('ask').onsubmit = async event => {
+      event.preventDefault(); notice(''); const question = $('question').value.trim(); if (question.length < 2) return;
+      bubble(question, 'user'); $('question').value = ''; $('askButton').disabled = true;
+      try {
+        const result = await api('/api/ask', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({question, history:history.slice(-6)})});
+        bubble(result.answer, 'assistant');
+        history.push({role:'user', content:question}, {role:'assistant', content:result.answer.slice(0,1000)});
+        if (result.sources.length) {
+          const box = document.createElement('div'); box.className = 'sources';
+          result.sources.forEach(source => {
+            const item = document.createElement('div'); item.className = 'source';
+            const head = document.createElement('strong'); head.textContent = '[' + source.number + '] ' + source.filename + ' · ' + source.locator;
+            const excerpt = document.createElement('p'); excerpt.textContent = source.excerpt;
+            item.append(head, excerpt); box.append(item);
+          });
+          $('messages').append(box);
+        }
+        $('messages').scrollTop = $('messages').scrollHeight;
+      } catch(e) { notice(e.message); } finally { $('askButton').disabled = false; }
+    };
+    refresh().catch(e => notice(e.message));
+  </script>
+</body>
+</html>
