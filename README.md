@@ -97,4 +97,3 @@ python -m pytest -q
 ## 放到 GitHub 前
 
 建议以 `ai-rag-knowledge-base` 建立独立仓库，保留 README、示例文件和测试。先在本机完成上传与问答演示，再自行决定是否公开和部署；本仓库不包含 API 密钥或真实业务数据。
-
